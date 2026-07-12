@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}{{ task.title }} · Cascade{% endblock %}
+{% block content %}
+<div hx-ext="sse" sse-connect="/api/dashboard/sse/{{ task.project_id }}" sse-close>
+<div class="mb-6">
+    <a href="/projects/{{ task.project_id }}" class="text-xs text-slate-500 hover:text-slate-300">← Project</a>
+    <div class="flex items-start justify-between mt-1">
+        <div>
+            <h1 class="text-2xl font-bold">{{ task.title }}</h1>
+            <div class="flex items-center gap-2 mt-2 text-xs">
+                <span class="px-2 py-0.5 rounded-full bg-slate-800 uppercase font-bold">{{ task.type }}</span>
+                <span class="px-2 py-0.5 rounded-full font-semibold
+                    {% if task.status == 'completed' %}bg-emerald-500/20 text-emerald-300
+                    {% elif task.status == 'ongoing' %}bg-brand-500/20 text-brand-300
+                    {% elif task.status == 'blocked' %}bg-red-500/20 text-red-300
+                    {% else %}bg-slate-700/50 text-slate-300{% endif %}">{{ task.status }}</span>
+                <span class="text-slate-500">assigned: {{ task.assignee }}</span>
+                {% if completion_verified %}<span class="text-emerald-400">✓ completion verified</span>{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    {# --- Conversation log --- #}
+    <div class="lg:col-span-2">
+        <h2 class="text-sm font-bold uppercase tracking-wide text-slate-400 mb-3">Conversation</h2>
+        <div id="messages" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+            {% for msg in messages %}
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-3"
+                 data-msg-id="{{ msg.id }}">
+                <div class="flex items-center gap-2 mb-1 text-xs">
+                    <span class="font-semibold
+                        {% if msg.author == 'agent' %}text-emerald-400
+                        {% elif msg.author == 'system' %}text-amber-400
+                        {% else %}text-sky-400{% endif %}">{{ msg.author }}</span>
+                    <span class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">{{ msg.message_type }}</span>
+                    <span class="text-slate-600">{{ msg.created_at.strftime('%H:%M') }}</span>
+                </div>
+                <p class="text-sm text-slate-300 whitespace-pre-wrap">{{ msg.content }}</p>
+            </div>
+            {% else %}
+            <div class="text-slate-600 text-sm italic">No messages yet.</div>
+            {% endfor %}
+        </div>
+
+        <form onsubmit="return sendMessage(event)" class="mt-4 flex gap-2">
+            <input type="text" id="msg-input" placeholder="Send a reply…"
+                   class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:border-brand-600 focus:outline-none">
+            <button class="bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-lg text-sm font-semibold">Send</button>
+        </form>
+
+        <div class="flex flex-wrap gap-2 mt-3">
+            {% set transitions = {'ongoing':'Start','completed':'Complete','blocked':'Block','rejected':'Reject','not_started':'Re-queue'} %}
+            {% for key, label in transitions.items() %}
+            {% if key != task.status %}
+            <button onclick="setStatus('{{ key }}')"
+                    class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 hover:border-brand-600 hover:text-brand-400 transition">{{ label }}</button>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    {# --- Sidebar: coherence + dependencies --- #}
+    <div class="space-y-6">
+        <div>
+            <h2 class="text-sm font-bold uppercase tracking-wide text-slate-400 mb-3">Coherence</h2>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2 text-sm">
+                <div class="flex justify-between"><span class="text-slate-500">Goal</span>
+                    <span class="font-mono text-xs">{{ task.goal_id or '—' }}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Milestone</span>
+                    <span class="font-mono text-xs">{{ task.milestone_id or '—' }}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Parent</span>
+                    <span class="font-mono text-xs">{{ task.parent_id or '—' }}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Priority</span><span>{{ task.priority }}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Story points</span><span>{{ task.story_points or '—' }}</span></div>
+            </div>
+        </div>
+
+        <div>
+            <h2 class="text-sm font-bold uppercase tracking-wide text-slate-400 mb-3">Dependencies</h2>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm space-y-3">
+                <div>
+                    <div class="text-xs text-slate-500 mb-1">Depends on ({{ dependencies.depends_on|length }})</div>
+                    {% for d in dependencies.depends_on %}
+                    <a href="/tasks/{{ d.task_id }}" class="flex items-center justify-between text-xs py-1 hover:text-brand-400">
+                        <span class="truncate">{{ d.title }}</span>
+                        <span class="shrink-0 ml-2 {% if d.completed %}text-emerald-400{% else %}text-amber-400{% endif %}">{{ d.status }}</span>
+                    </a>
+                    {% else %}<span class="text-slate-600 text-xs">none</span>{% endfor %}
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 mb-1">Blocks ({{ dependencies.blocks|length }})</div>
+                    {% for b in dependencies.blocks %}
+                    <a href="/tasks/{{ b.task_id }}" class="block text-xs py-1 hover:text-brand-400 truncate">{{ b.title }}</a>
+                    {% else %}<span class="text-slate-600 text-xs">none</span>{% endfor %}
+                </div>
+                {% if dependencies.depends_on %}
+                <div class="text-xs font-semibold
+                    {% if dependencies.all_deps_completed %}text-emerald-400{% else %}text-amber-400{% endif %}">
+                    {% if dependencies.all_deps_completed %}✓ ready to start{% else %}⏳ waiting on deps{% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if children %}
+        <div>
+            <h2 class="text-sm font-bold uppercase tracking-wide text-slate-400 mb-3">Subtasks</h2>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm space-y-1">
+                {% for c in children %}
+                <a href="/tasks/{{ c.id }}" class="flex items-center justify-between text-xs py-1 hover:text-brand-400">
+                    <span class="truncate">{{ c.title }}</span>
+                    <span class="text-slate-500">{{ c.status }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function sendMessage(e) {
+    e.preventDefault();
+    const input = document.getElementById('msg-input');
+    const content = input.value.trim();
+    if (!content) return false;
+    input.value = '';
+    const res = await fetch('/api/tasks/{{ task.id }}/messages', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({task_id: '{{ task.id }}', author: 'human', content, message_type: 'reply'})
+    });
+    if (res.ok) location.reload();
+    return false;
+}
+async function setStatus(status) {
+    const res = await fetch('/api/tasks/{{ task.id }}/status?actor=human', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({status})
+    });
+    if (res.ok) location.reload();
+    else { const e = await res.json(); alert(e.detail || 'failed'); }
+}
+// Append SSE messages live
+document.body.addEventListener('htmx:sseMessage', (e) => {
+    try {
+        const evt = JSON.parse(e.detail);
+    } catch (_) {}
+});
+</script>
+{% endblock %}

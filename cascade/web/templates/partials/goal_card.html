@@ -1,0 +1,14 @@
+{# Goal card with read-time progress. Expects a goal dict with progress fields. #}
+<div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+    <div class="flex items-center justify-between mb-2">
+        <a href="#" class="font-semibold text-sm hover:text-brand-500">{{ goal.title }}</a>
+        <span class="text-xs text-slate-500">{{ goal.task_completed }}/{{ goal.task_total }}
+            {% if goal.metric_name %}· {{ goal.metric_name }}{% endif %}</span>
+    </div>
+    {% if goal.description %}<p class="text-xs text-slate-500 mb-3 line-clamp-2">{{ goal.description }}</p>{% endif %}
+    {% set pct = goal.percentage if goal.percentage is defined else 0 %}
+    {% with percentage=pct, label=false %}
+        {% include "partials/progress_bar.html" %}
+    {% endwith %}
+    <div class="text-right text-xs font-semibold mt-1">{{ pct|round(0) }}%</div>
+</div>

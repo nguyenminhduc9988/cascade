@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · Cascade{% endblock %}
+{% block content %}
+<div hx-ext="sse" sse-connect="/api/dashboard/sse/{{ project.id }}" sse-close>
+<div class="flex items-start justify-between mb-2">
+    <div>
+        <a href="/" class="text-xs text-slate-500 hover:text-slate-300">← Dashboard</a>
+        <h1 class="text-3xl font-extrabold mt-1">{{ project.name }}</h1>
+        {% if project.mission %}<p class="text-slate-400 mt-1 max-w-2xl">{{ project.mission }}</p>{% endif %}
+    </div>
+    <span class="text-xs px-3 py-1 rounded-full bg-slate-800 text-slate-300 capitalize">{{ project.status }}</span>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-8">
+    {# --- Goals (strategic coherence) --- #}
+    <div class="lg:col-span-1">
+        <h2 class="text-sm font-bold uppercase tracking-wide text-slate-400 mb-3">Goals</h2>
+        {% if goals %}
+        <div class="space-y-3">
+            {% for goal in goals %}
+            {% with goal=goal.model_dump() %}{% include "partials/goal_card.html" %}{% endwith %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-slate-600 italic">No goals yet.</p>
+        {% endif %}
+    </div>
+
+    {# --- Kanban board --- #}
+    <div class="lg:col-span-3">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-bold uppercase tracking-wide text-slate-400">Tasks</h2>
+            <button onclick="quickAddTask('{{ project.id }}')"
+                    class="text-xs bg-brand-600 hover:bg-brand-700 px-3 py-1.5 rounded-lg font-semibold transition">+ Task</button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="board">
+            {% set cols = {'not_started': 'To Do', 'ongoing': 'In Progress', 'blocked': 'Blocked', 'completed': 'Done'} %}
+            {% for key, label in cols.items() %}
+            <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 min-h-[200px]"
+                 data-status="{{ key }}"
+                 ondragover="event.preventDefault(); this.classList.add('ring-2','ring-brand-600')"
+                 ondragleave="this.classList.remove('ring-2','ring-brand-600')"
+                 ondrop="dropTask(event, '{{ key }}')">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold uppercase tracking-wide text-slate-400">{{ label }}</span>
+                    <span class="text-xs text-slate-600">{{ columns[key]|length }}</span>
+                </div>
+                <div class="space-y-2">
+                    {% for task in columns[key] %}
+                    {% include "partials/task_card.html" %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{# --- Milestones --- #}
+{% if milestones %}
+<div class="mt-10">
+    <h2 class="text-sm font-bold uppercase tracking-wide text-slate-400 mb-3">Milestones</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {% for ms in milestones %}
+        {% set m = ms.model_dump() %}
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+            <div class="flex items-center justify-between mb-2">
+                <span class="font-semibold text-sm">{{ m.title }}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-slate-800 capitalize">{{ m.status }}</span>
+            </div>
+            {% with percentage=m.progress_percentage, label=(m.task_completed|string ~ '/' ~ m.task_total|string ~ ' tasks') %}
+                {% include "partials/progress_bar.html" %}
+            {% endwith %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function quickAddTask(projectId) {
+    const title = prompt('Task title?');
+    if (!title) return;
+    await fetch('/api/tasks', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({project_id: projectId, title, type: 'task', created_by: 'human'})
+    });
+    location.reload();
+}
+async function dropTask(ev, newStatus) {
+    ev.preventDefault();
+    const card = ev.target.closest('[data-status]');
+    card.classList.remove('ring-2','ring-brand-600');
+    const taskId = ev.dataTransfer.getData('text/plain')
+        || (ev.target.closest('[data-task-id]') && ev.target.closest('[data-task-id]').dataset.taskId);
+    if (!taskId) return;
+    const res = await fetch(`/api/tasks/${taskId}/status?actor=human`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({status: newStatus})
+    });
+    if (res.ok) location.reload();
+    else { const e = await res.json(); alert(e.detail || 'status change failed'); }
+}
+document.querySelectorAll('[data-task-id]').forEach(el => {
+    el.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', el.dataset.taskId));
+});
+</script>
+{% endblock %}

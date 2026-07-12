@@ -1,0 +1,12 @@
+{# Reusable progress bar. Expects `percentage` and optional `label`. #}
+<div class="w-full">
+    {% if label is defined and label %}<div class="flex justify-between text-xs mb-1">
+        <span class="text-slate-400">{{ label }}</span>
+        <span class="font-semibold">{{ percentage|round(0) }}%</span>
+    </div>{% endif %}
+    <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+        <div class="h-full rounded-full transition-all duration-500
+            {% if percentage >= 100 %}bg-emerald-500{% elif percentage >= 50 %}bg-brand-600{% else %}bg-amber-500{% endif %}"
+            style="width: {{ percentage }}%"></div>
+    </div>
+</div>

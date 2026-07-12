@@ -1,0 +1,24 @@
+{# Task card for Kanban columns. Expects a `task` object with attributes. #}
+<a href="/tasks/{{ task.id }}"
+   class="block bg-slate-800/70 border border-slate-700/60 rounded-lg p-3 hover:border-brand-600 hover:bg-slate-800 transition cursor-grab"
+   draggable="true"
+   data-task-id="{{ task.id }}">
+    <div class="flex items-start justify-between gap-2">
+        <span class="text-sm font-medium leading-snug">{{ task.title }}</span>
+        <span class="shrink-0 text-[10px] uppercase font-bold tracking-wide px-1.5 py-0.5 rounded
+            {% if task.type == 'epic' %}bg-fuchsia-500/20 text-fuchsia-300
+            {% elif task.type == 'story' %}bg-sky-500/20 text-sky-300
+            {% elif task.type == 'subtask' %}bg-slate-600/40 text-slate-300
+            {% else %}bg-slate-700/50 text-slate-400{% endif %}">{{ task.type }}</span>
+    </div>
+    <div class="flex items-center gap-2 mt-2 text-[11px] text-slate-400">
+        <span class="flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full
+                {% if task.assignee == 'agent' %}bg-emerald-400{% else %}bg-sky-400{% endif %}"></span>
+            {{ task.assignee }}
+        </span>
+        {% if task.goal_id %}<span class="text-brand-400">◆ goal</span>{% endif %}
+        {% if task.story_points %}<span>· {{ task.story_points }}pt</span>{% endif %}
+        {% if task.priority %}<span class="font-bold text-amber-400">P{{ task.priority }}</span>{% endif %}
+    </div>
+</a>

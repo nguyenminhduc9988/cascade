@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cascade"
+version = "0.1.0"
+description = "Cascade — agent task orchestration platform combining Leantime's strategic coherence with AgentRQ's agent orchestration"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]",
+    "aiosqlite",
+    "alembic",
+    "pydantic",
+    "pydantic-settings",
+    "python-ulid",
+    "jinja2",
+    "python-multipart",
+    "apscheduler",
+    "croniter",
+    "sse-starlette",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+]
+
+[tool.setuptools.packages.find]
+include = ["cascade*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

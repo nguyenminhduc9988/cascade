@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Board · {{ project.name }}{% endblock %}
+{% block content %}
+<div hx-ext="sse" sse-connect="/api/dashboard/sse/{{ project.id }}" sse-close>
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <a href="/projects/{{ project.id }}" class="text-xs text-slate-500 hover:text-slate-300">← Project</a>
+        <h1 class="text-2xl font-bold mt-1">{{ project.name }} · Board</h1>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3" id="board">
+    {% set cols = {'not_started': 'To Do', 'ongoing': 'In Progress', 'blocked': 'Blocked', 'completed': 'Done'} %}
+    {% for key, label in cols.items() %}
+    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 min-h-[300px]"
+         data-status="{{ key }}"
+         ondragover="event.preventDefault(); this.classList.add('ring-2','ring-brand-600')"
+         ondragleave="this.classList.remove('ring-2','ring-brand-600')"
+         ondrop="dropTask(event, '{{ key }}')">
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-sm font-bold uppercase tracking-wide text-slate-400">{{ label }}</span>
+            <span class="text-xs text-slate-600">{{ columns[key]|length }}</span>
+        </div>
+        <div class="space-y-2">
+            {% for task in columns[key] %}
+            {% include "partials/task_card.html" %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function dropTask(ev, newStatus) {
+    ev.preventDefault();
+    const col = ev.currentTarget;
+    col.classList.remove('ring-2','ring-brand-600');
+    const taskId = ev.dataTransfer.getData('text/plain');
+    if (!taskId) return;
+    const res = await fetch(`/api/tasks/${taskId}/status?actor=human`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({status: newStatus})
+    });
+    if (res.ok) location.reload();
+    else { const e = await res.json(); alert(e.detail || 'status change failed'); }
+}
+document.querySelectorAll('[data-task-id]').forEach(el => {
+    el.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', el.dataset.taskId));
+});
+</script>
+{% endblock %}

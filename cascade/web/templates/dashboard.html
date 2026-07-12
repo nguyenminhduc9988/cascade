@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Cascade{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-8">
+    <div>
+        <h1 class="text-3xl font-extrabold">Dashboard</h1>
+        <p class="text-slate-400 mt-1">Big-picture view of every project, its goals and live agents.</p>
+    </div>
+    <button onclick="createDemoProject()"
+            class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+        + New Project
+    </button>
+</div>
+
+{% if projects %}
+<div id="project-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    {% for project in projects %}
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-brand-700 transition"
+         id="project-{{ project.id }}">
+        <div class="flex items-start justify-between mb-4">
+            <div>
+                <a href="/projects/{{ project.id }}" class="text-lg font-bold hover:text-brand-500 transition">
+                    {{ project.name }}
+                </a>
+                {% if project.mission %}
+                <p class="text-sm text-slate-400 mt-1 line-clamp-2">{{ project.mission }}</p>
+                {% endif %}
+            </div>
+            <span class="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full
+                {% if project.id in live_projects %}bg-emerald-500/15 text-emerald-400{% else %}bg-slate-700/50 text-slate-400{% endif %}">
+                <span class="w-2 h-2 rounded-full
+                    {% if project.id in live_projects %}bg-emerald-400 animate-pulse{% else %}bg-slate-500{% endif %}"></span>
+                {% if project.id in live_projects %}agent live{% else %}idle{% endif %}
+            </span>
+        </div>
+
+        <div hx-get="/partials/project_aggregate/{{ project.id }}"
+             hx-trigger="load, every 15s"
+             hx-target="this"
+             hx-swap="innerHTML"
+             class="text-sm space-y-2"
+             id="agg-{{ project.id }}">
+            <div class="text-slate-500 text-xs">loading goals & tasks…</div>
+        </div>
+
+        <div class="mt-4 flex gap-3 text-xs">
+            <a href="/projects/{{ project.id }}" class="text-brand-500 hover:underline">Open project →</a>
+            <a href="/board/{{ project.id }}" class="text-slate-400 hover:text-slate-200">Board</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="bg-slate-900 border border-dashed border-slate-700 rounded-2xl p-16 text-center">
+    <div class="text-5xl mb-4">🌀</div>
+    <h2 class="text-xl font-bold mb-2">No projects yet</h2>
+    <p class="text-slate-400 mb-6">Create your first project to start orchestrating agent work with strategic coherence.</p>
+    <button onclick="createDemoProject()"
+            class="bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition">
+        Create Demo Project
+    </button>
+</div>
+{% endif %}
+
+<div class="mt-10 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div class="text-slate-400 text-xs uppercase tracking-wide mb-1">Live Agents</div>
+        <div class="text-2xl font-bold text-emerald-400">{{ live_projects|length }}</div>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div class="text-slate-400 text-xs uppercase tracking-wide mb-1">Total Projects</div>
+        <div class="text-2xl font-bold">{{ projects|length }}</div>
+    </div>
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div class="text-slate-400 text-xs uppercase tracking-wide mb-1">Monitoring Loop</div>
+        <div class="text-2xl font-bold text-emerald-400">10s tick</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function createDemoProject() {
+    const name = prompt('Project name?', 'Phoenix Launch');
+    if (!name) return;
+    const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name,
+            mission: 'Coordinate autonomous agents toward a measurable strategic goal.',
+            description: 'Created via the Cascade dashboard.'
+        })
+    });
+    if (res.ok) { const p = await res.json(); location.href = '/projects/' + p.id; }
+}
+</script>
+{% endblock %}

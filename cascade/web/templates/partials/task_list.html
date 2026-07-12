@@ -1,0 +1,15 @@
+{# Compact task list. Expects `tasks` (list of Task objects). #}
+<div class="space-y-2">
+    {% for task in tasks %}
+    <a href="/tasks/{{ task.id }}" class="flex items-center justify-between bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 hover:border-brand-700 transition">
+        <span class="text-sm truncate">{{ task.title }}</span>
+        <span class="shrink-0 ml-3 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded
+            {% if task.status == 'completed' %}bg-emerald-500/20 text-emerald-300
+            {% elif task.status == 'ongoing' %}bg-brand-500/20 text-brand-300
+            {% elif task.status == 'blocked' %}bg-red-500/20 text-red-300
+            {% else %}bg-slate-700/50 text-slate-400{% endif %}">{{ task.status }}</span>
+    </a>
+    {% else %}
+    <div class="text-slate-600 text-sm italic py-2">No tasks.</div>
+    {% endfor %}
+</div>
