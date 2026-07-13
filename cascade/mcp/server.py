@@ -37,9 +37,12 @@ class MCPServerRegistry:
         fn = self.tools.get(name)
         if fn is None:
             raise KeyError(f"Unknown MCP tool: {name}")
-        # Default project_id to this server's workspace when the tool wants it.
-        if "project_id" in fn.__code__.co_varnames and "project_id" not in arguments:
-            arguments.setdefault("project_id", self.project_id)
+        # Force-scope project_id to this server's workspace when the tool
+        # accepts it — this is what makes the server *per-workspace*. A
+        # caller-supplied project_id must never override it, or an agent
+        # connected to one project's server could read/write another's.
+        if "project_id" in fn.__code__.co_varnames[: fn.__code__.co_argcount]:
+            arguments["project_id"] = self.project_id
         return await fn(session, **arguments)
 
     def list_tools(self) -> list[str]:

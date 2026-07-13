@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cascade.models import Milestone, Task
@@ -63,10 +63,13 @@ class MilestoneService:
         return milestone
 
     async def delete_milestone(self, milestone_id: str) -> bool:
-        """Delete a milestone."""
+        """Delete a milestone (unlinking tasks)."""
         milestone = await self.get_milestone(milestone_id)
         if milestone is None:
             return False
+        await self.session.execute(
+            update(Task).where(Task.milestone_id == milestone_id).values(milestone_id=None)
+        )
         await self.session.delete(milestone)
         await self.session.commit()
         return True

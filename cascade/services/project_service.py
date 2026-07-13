@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from cascade.models import Project
+from cascade.models import Project, Task, Telemetry
 from cascade.schemas import ProjectCreate, ProjectUpdate
 from cascade.utils import new_id
 
@@ -60,10 +60,40 @@ class ProjectService:
         return project
 
     async def delete_project(self, project_id: str) -> bool:
-        """Delete a project (cascades to goals, milestones, tasks)."""
+        """Delete a project (cascades to goals, milestones, tasks, events).
+
+        The self-referential ``parent_id``/``cron_template_id`` links between
+        a project's own tasks are cleared first: ORM cascade-delete of the
+        ``tasks`` collection issues per-row DELETEs without resolving that
+        same-table ordering, which trips ``PRAGMA foreign_keys=ON`` whenever
+        a task is deleted before the child/clone still pointing at it. The
+        immutable :class:`~cascade.models.telemetry.Telemetry` audit trail is
+        unlinked the same way rather than deleted. Every mutation here is an
+        ORM attribute assignment (not a raw bulk ``UPDATE``) so the unit of
+        work orders these UPDATEs ahead of the cascade DELETEs.
+        """
         project = await self.get_project(project_id)
         if project is None:
             return False
+        tasks = await self.session.execute(
+            select(Task).where(Task.project_id == project_id)
+        )
+        task_ids = []
+        for task in tasks.scalars().all():
+            task.parent_id = None
+            task.cron_template_id = None
+            task_ids.append(task.id)
+
+        telemetry_filter = Telemetry.project_id == project_id
+        if task_ids:
+            telemetry_filter = or_(telemetry_filter, Telemetry.task_id.in_(task_ids))
+        telemetry_rows = await self.session.execute(
+            select(Telemetry).where(telemetry_filter)
+        )
+        for record in telemetry_rows.scalars().all():
+            record.project_id = None
+            record.task_id = None
+
         await self.session.delete(project)
         await self.session.commit()
         return True

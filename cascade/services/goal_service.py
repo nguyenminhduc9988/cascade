@@ -6,7 +6,7 @@ percentage is computed on every read from the linked tasks' statuses.
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cascade.models import Goal, Task
@@ -71,6 +71,9 @@ class GoalService:
         goal = await self.get_goal(goal_id)
         if goal is None:
             return False
+        await self.session.execute(
+            update(Task).where(Task.goal_id == goal_id).values(goal_id=None)
+        )
         await self.session.delete(goal)
         await self.session.commit()
         return True

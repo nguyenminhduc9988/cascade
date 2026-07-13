@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from cascade.database import Base
+
+if TYPE_CHECKING:
+    from cascade.models.project import Project
 
 
 class Event(Base):
@@ -26,6 +29,8 @@ class Event(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
     payload_json: Mapped[Optional[str]] = mapped_column(Text)  # template payload
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    project: Mapped["Project"] = relationship(back_populates="events")
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<Event {self.id} {self.name!r}>"
@@ -46,6 +51,8 @@ class EventTrigger(Base):
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     task_template_json: Mapped[str] = mapped_column(Text)  # JSON template
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+    project: Mapped["Project"] = relationship(back_populates="event_triggers")
 
     def __repr__(self) -> str:  # pragma: no cover - debug helper
         return f"<EventTrigger {self.id} on {self.event_name!r}>"

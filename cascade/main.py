@@ -60,10 +60,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # No cookie-based auth is used (Bearer tokens only), so a wildcard origin
+    # is safe here — pairing it with allow_credentials=True would not be.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -104,7 +106,8 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Entry point for the ``cascade`` console script."""
     import uvicorn
 
     uvicorn.run(
@@ -113,3 +116,7 @@ if __name__ == "__main__":
         port=settings.port,
         reload=settings.reload,
     )
+
+
+if __name__ == "__main__":
+    run()

@@ -56,7 +56,7 @@ class Task(Base):
     )  # not_started|ongoing|completed|blocked|rejected|cron
 
     # Assignment (bidirectional delegation from AgentRQ)
-    created_by: Mapped[str] = mapped_column(String(20), default="human")  # human|agent
+    created_by: Mapped[str] = mapped_column(String(20), default="human")  # human|agent|system
     assignee: Mapped[str] = mapped_column(String(20), default="agent")  # human|agent
 
     # Hierarchy (self-referential parent)

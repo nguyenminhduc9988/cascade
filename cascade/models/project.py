@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from cascade.database import Base
 
 if TYPE_CHECKING:
+    from cascade.models.event import Event, EventTrigger
     from cascade.models.goal import Goal
     from cascade.models.milestone import Milestone
     from cascade.models.task import Task
@@ -43,6 +44,12 @@ class Project(Base):
         back_populates="project", cascade="all, delete-orphan"
     )
     tasks: Mapped[list["Task"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+    events: Mapped[list["Event"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
+    event_triggers: Mapped[list["EventTrigger"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
 

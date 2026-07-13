@@ -22,7 +22,7 @@ RULES:
 - Link tasks to goals and milestones to maintain strategic coherence.
 
 STATUS STATE MACHINE:
-- not_started -> ongoing (claim work)
+- not_started -> ongoing (get_task claims the task for you automatically)
 - ongoing -> completed | blocked | rejected
 - blocked -> ongoing (after the human unblocks you)
 

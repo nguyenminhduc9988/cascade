@@ -31,7 +31,7 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     project_id: Optional[str] = None  # may be inferred from parent
     status: str = Field("not_started", pattern="^(not_started|ongoing|cron)$")
-    created_by: str = Field("human", pattern="^(human|agent)$")
+    created_by: str = Field("human", pattern="^(human|agent|system)$")
     assignee: str = Field("agent", pattern="^(human|agent)$")
     parent_id: Optional[str] = None
     goal_id: Optional[str] = None

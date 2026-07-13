@@ -84,3 +84,20 @@ async def test_manual_goal_progress(session):
     await goal_svc.update_goal(goal.id, GoalUpdate(current_value=25.0))
     progress = await goal_svc.get_progress(goal.id)
     assert progress.percentage == 25.0
+
+
+@pytest.mark.asyncio
+async def test_delete_goal_unlinks_tasks(session):
+    project = await _project(session)
+    goal_svc = GoalService(session)
+    task_svc = TaskService(session)
+    goal = await goal_svc.create_goal(GoalCreate(project_id=project.id, title="G"))
+    task = await task_svc.create_task(
+        TaskCreate(project_id=project.id, title="t", goal_id=goal.id)
+    )
+
+    assert await goal_svc.delete_goal(goal.id) is True
+
+    refetched = await task_svc.get_task(task.id)
+    assert refetched is not None
+    assert refetched.goal_id is None

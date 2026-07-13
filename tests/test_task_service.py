@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cascade.models import Project
 from cascade.schemas.task import TaskCreate
@@ -119,3 +122,61 @@ async def test_add_message_appends_to_log(session):
     msgs = await svc.list_messages(task.id)
     assert len(msgs) == 1
     assert msgs[0].content == "starting work"
+
+
+@pytest.mark.asyncio
+async def test_add_message_rejects_nonexistent_task(session):
+    svc = TaskService(session)
+    with pytest.raises(ValueError):
+        await svc.add_message("does-not-exist", "agent", "hi", "progress")
+
+
+@pytest.mark.asyncio
+async def test_dequeue_claims_the_task(session):
+    """Dequeue must atomically claim the task (not_started -> ongoing)."""
+    project = await _project(session)
+    svc = TaskService(session)
+    task = await svc.create_task(TaskCreate(project_id=project.id, title="T"))
+    claimed = await svc.get_next_task(project.id)
+    assert claimed is not None
+    assert claimed.id == task.id
+    assert claimed.status == "ongoing"
+    assert claimed.started_at is not None
+    # Already claimed -> a second dequeue must not return it again.
+    assert await svc.get_next_task(project.id) is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_dequeue_never_double_claims(engine):
+    """Two agents racing to dequeue the same task must not both win it."""
+    factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as setup_session:
+        project = await _project(setup_session)
+        setup_svc = TaskService(setup_session)
+        task = await setup_svc.create_task(
+            TaskCreate(project_id=project.id, title="contested")
+        )
+
+    async def _dequeue():
+        async with factory() as session:
+            return await TaskService(session).get_next_task(project.id)
+
+    results = await asyncio.gather(_dequeue(), _dequeue())
+    winners = [r for r in results if r is not None and r.id == task.id]
+    assert len(winners) == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_task_unlinks_children_instead_of_orphaning(session):
+    project = await _project(session)
+    svc = TaskService(session)
+    parent = await svc.create_task(TaskCreate(project_id=project.id, title="epic"))
+    child = await svc.create_task(
+        TaskCreate(project_id=project.id, title="subtask", parent_id=parent.id)
+    )
+
+    assert await svc.delete_task(parent.id) is True
+
+    refetched = await svc.get_task(child.id)
+    assert refetched is not None
+    assert refetched.parent_id is None

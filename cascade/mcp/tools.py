@@ -29,11 +29,12 @@ async def get_task(
 ) -> dict:
     """Dequeue the next ready task (no ID) or fetch a specific task (with ID).
 
-    When ``task_id`` is omitted this is the pull-based work queue: it returns
-    the highest-priority ``not_started`` task whose dependencies are completed.
+    When ``task_id`` is omitted this is the pull-based work queue: it atomically
+    claims (transitions to ``ongoing``) and returns the highest-priority
+    ``not_started`` task whose dependencies are completed.
     """
     task_svc = TaskService(session)
-    if task_id:
+    if task_id is not None:
         task = await task_svc.get_task(task_id)
         if task is None:
             return {"error": "task not found"}
@@ -104,12 +105,15 @@ async def reply(
 ) -> dict:
     """Send a progress/reply/ask message to a task's conversation log."""
     task_svc = TaskService(session)
-    msg = await task_svc.add_message(
-        task_id=task_id,
-        author=author,
-        content=content,
-        message_type=message_type,
-    )
+    try:
+        msg = await task_svc.add_message(
+            task_id=task_id,
+            author=author,
+            content=content,
+            message_type=message_type,
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
     return {"id": msg.id, "task_id": task_id, "message_type": message_type}
 
 
@@ -199,7 +203,10 @@ async def auto_decide(
 ) -> dict:
     """Auto-resolve a choice without human intervention (autonomy helper)."""
     svc = AutoDecisionService(session)
-    return await svc.auto_resolve_choice(task_id, choices)
+    try:
+        return await svc.auto_resolve_choice(task_id, choices)
+    except ValueError as exc:
+        return {"error": str(exc)}
 
 
 # --------------------------------------------------------------- REGISTRY

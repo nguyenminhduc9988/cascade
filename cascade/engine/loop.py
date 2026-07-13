@@ -45,20 +45,41 @@ async def stall_detector_tick() -> int:
         return await poller_tick(session)
 
 
-async def _tick() -> None:
-    """Run one monitoring tick: poller + pinger + scheduler concurrently."""
+async def _poller_tick_isolated() -> int:
+    """Run the poller in its own session (never share one across concurrent ticks)."""
     async with async_session_factory() as session:
-        poller_task = asyncio.create_task(poller_tick(session))
-        pinger_task = asyncio.create_task(pinger_tick(session))
-        scheduler_task = asyncio.create_task(scheduler_tick())
-        stall_task = asyncio.create_task(stall_detector_tick())
-        try:
-            await asyncio.gather(
-                poller_task, pinger_task, scheduler_task, stall_task,
-                return_exceptions=True,
-            )
-        finally:
-            await session.commit()
+        result = await poller_tick(session)
+        await session.commit()
+        return result
+
+
+async def _pinger_tick_isolated() -> int:
+    """Run the pinger in its own session (never share one across concurrent ticks)."""
+    async with async_session_factory() as session:
+        result = await pinger_tick(session)
+        await session.commit()
+        return result
+
+
+async def _tick() -> None:
+    """Run one monitoring tick: poller + pinger + scheduler concurrently.
+
+    Each concurrent piece of work gets its own :class:`AsyncSession` —
+    ``AsyncSession`` is not safe for concurrent use by multiple coroutines,
+    so sharing one across ``asyncio.gather`` would corrupt session state.
+    """
+    results = await asyncio.gather(
+        _poller_tick_isolated(),
+        _pinger_tick_isolated(),
+        scheduler_tick(),
+        stall_detector_tick(),
+        return_exceptions=True,
+    )
+    for name, result in zip(
+        ("poller", "pinger", "scheduler", "stall_detector"), results
+    ):
+        if isinstance(result, BaseException):
+            logger.error("Monitoring tick component %r failed: %s", name, result)
 
 
 async def monitoring_loop() -> None:

@@ -143,3 +143,12 @@ async def test_pages_render(client):
     assert "Cascade" in res.text
     res = await client.get(f"/projects/{pid}")
     assert res.status_code == 200
+
+    task = (
+        await client.post("/api/tasks", json={"project_id": pid, "title": "t"})
+    ).json()
+    res = await client.get(f"/tasks/{task['id']}")
+    assert res.status_code == 200
+
+    res = await client.get(f"/board/{pid}")
+    assert res.status_code == 200

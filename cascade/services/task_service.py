@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -101,7 +101,7 @@ class TaskService:
         return task
 
     async def get_task(self, task_id: str) -> Task | None:
-        """Fetch a task with messages and dependencies eagerly loaded."""
+        """Fetch a task with messages, dependencies and children eagerly loaded."""
         result = await self.session.execute(
             select(Task)
             .options(
@@ -112,6 +112,7 @@ class TaskService:
                 selectinload(Task.dependencies_as_dep).selectinload(
                     TaskDependency.task
                 ),
+                selectinload(Task.children),
             )
             .where(Task.id == task_id)
         )
@@ -155,10 +156,33 @@ class TaskService:
         return task
 
     async def delete_task(self, task_id: str) -> bool:
-        """Delete a task and its cascade-orphaned messages/dependencies."""
+        """Delete a task and its cascade-orphaned messages/dependencies.
+
+        Any subtasks or cron-spawned children pointing at this task are
+        unlinked first (``parent_id``/``cron_template_id`` -> ``NULL``), as
+        is the immutable :class:`~cascade.models.telemetry.Telemetry` audit
+        trail (which is never deleted, only unlinked) — so deleting a task
+        never leaves a dangling foreign key behind. These are ORM-managed
+        attribute mutations (not a raw bulk ``UPDATE``) so the unit of work
+        orders the NULL-out UPDATEs before the DELETE at flush time —
+        required now that ``PRAGMA foreign_keys=ON`` enforces every FK,
+        including the ones nothing was cascading before.
+        """
         task = await self.get_task(task_id)
         if task is None:
             return False
+        for child in task.children:
+            child.parent_id = None
+        cron_children = await self.session.execute(
+            select(Task).where(Task.cron_template_id == task_id)
+        )
+        for clone in cron_children.scalars().all():
+            clone.cron_template_id = None
+        telemetry_rows = await self.session.execute(
+            select(Telemetry).where(Telemetry.task_id == task_id)
+        )
+        for record in telemetry_rows.scalars().all():
+            record.task_id = None
         await self.session.delete(task)
         await self.session.commit()
         return True
@@ -236,13 +260,17 @@ class TaskService:
     async def get_next_task(
         self, project_id: str, assignee: str = "agent"
     ) -> Task | None:
-        """DEQUEUE: highest-priority ready ``not_started`` task.
+        """DEQUEUE: atomically claim the highest-priority ready ``not_started`` task.
 
         Uses the ``idx_tasks_dequeue`` composite index (project, assignee,
-        status) for the base scan, then filters by DAG readiness.
+        status) for the base scan, then filters by DAG readiness. Claiming is
+        a conditional ``UPDATE ... WHERE status = 'not_started'``, so when two
+        agents race to dequeue at once only one of them can win a given task —
+        the loser's update matches zero rows and it moves on to the next
+        candidate instead of both starting duplicate work.
         """
         candidates = await self.session.execute(
-            select(Task)
+            select(Task.id)
             .where(
                 Task.project_id == project_id,
                 Task.assignee == assignee,
@@ -252,10 +280,26 @@ class TaskService:
                 Task.priority.desc(), Task.sort_order, Task.created_at
             )
         )
-        for task in candidates.scalars().all():
-            if await self.check_dependencies(task.id):
-                return task
+        for (task_id,) in candidates.all():
+            if not await self.check_dependencies(task_id):
+                continue
+            if await self._claim_task(task_id):
+                return await self.get_task(task_id)
         return None
+
+    async def _claim_task(self, task_id: str) -> bool:
+        """Atomically transition a ``not_started`` task to ``ongoing``.
+
+        Returns True iff this call won the claim (i.e. the row still had
+        status ``not_started`` at update time).
+        """
+        result = await self.session.execute(
+            update(Task)
+            .where(Task.id == task_id, Task.status == "not_started")
+            .values(status="ongoing", started_at=datetime.now(timezone.utc))
+        )
+        await self.session.commit()
+        return result.rowcount == 1
 
     # ---------------------------------------------------- STATE MACHINE
     async def update_status(
@@ -324,7 +368,33 @@ class TaskService:
                 "title": task.title,
             },
         )
+
+        if new_status == "completed" and task.emit_event_id:
+            await self._fire_completion_event(task)
+
         return task
+
+    async def _fire_completion_event(self, task: Task) -> None:
+        """Publish a task's declared ``emit_event_id`` on completion.
+
+        This is what makes ``emit_event_id`` actually drive cross-project
+        choreography (see :class:`cascade.models.event.Event`) — without it,
+        the field is inert metadata.
+        """
+        from cascade.models import Event
+        from cascade.schemas.event import EventPublish
+        from cascade.services.event_service import EventService
+
+        event = await self.session.get(Event, task.emit_event_id)
+        if event is None:
+            return
+        await EventService(self.session).publish_event(
+            EventPublish(
+                project_id=task.project_id,
+                name=event.name,
+                payload={"task_id": task.id, "title": task.title},
+            )
+        )
 
     # --------------------------------------------------------- MESSAGES
     async def add_message(
@@ -335,7 +405,15 @@ class TaskService:
         message_type: str = "reply",
         metadata: dict | None = None,
     ) -> Message:
-        """Append a message to the conversation log + broadcast via SSE."""
+        """Append a message to the conversation log + broadcast via SSE.
+
+        Raises :class:`ValueError` if ``task_id`` does not reference a real
+        task — otherwise the message would be silently orphaned.
+        """
+        task = await self.session.get(Task, task_id)
+        if task is None:
+            raise ValueError(f"Task {task_id} not found")
+
         msg = Message(
             id=new_id(),
             task_id=task_id,
@@ -346,17 +424,14 @@ class TaskService:
         )
         self.session.add(msg)
 
-        # Resolve project_id for telemetry + broadcast.
-        task = await self.session.get(Task, task_id)
-        project_id = task.project_id if task else None
-        if project_id:
-            await self._record_telemetry(
-                project_id=project_id,
-                task_id=task_id,
-                action="message",
-                actor=author,
-                details={"message_type": message_type},
-            )
+        project_id = task.project_id
+        await self._record_telemetry(
+            project_id=project_id,
+            task_id=task_id,
+            action="message",
+            actor=author,
+            details={"message_type": message_type},
+        )
         await self.session.commit()
         await self.session.refresh(msg)
 

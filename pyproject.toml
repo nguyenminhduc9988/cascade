@@ -3,11 +3,35 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cascade"
+name = "cascade-orchestrator"
 version = "0.1.0"
 description = "Cascade — agent task orchestration platform combining Leantime's strategic coherence with AgentRQ's agent orchestration"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Cascade contributors" }]
+keywords = [
+    "agents",
+    "orchestration",
+    "task-queue",
+    "fastapi",
+    "mcp",
+    "llm-agents",
+    "autonomous-agents",
+    "workflow",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Framework :: FastAPI",
+    "Framework :: AsyncIO",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Build Tools",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
@@ -32,8 +56,24 @@ dev = [
     "httpx",
 ]
 
+[project.urls]
+Homepage = "https://github.com/nguyenminhduc9988/cascade"
+Repository = "https://github.com/nguyenminhduc9988/cascade"
+Issues = "https://github.com/nguyenminhduc9988/cascade/issues"
+
+[project.scripts]
+cascade = "cascade.main:run"
+cascade-monitor = "cascade.integrations.monitor_daemon:main"
+
 [tool.setuptools.packages.find]
 include = ["cascade*"]
+
+[tool.setuptools.package-data]
+cascade = [
+    "web/templates/*.html",
+    "web/templates/partials/*.html",
+    "web/static/*.js",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
