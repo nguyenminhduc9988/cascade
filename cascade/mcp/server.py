@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from cascade.mcp.instructions import AGENT_INSTRUCTIONS
 from cascade.mcp.tools import MCP_TOOLS
+from cascade.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,15 @@ class MCPServerRegistry:
         # connected to one project's server could read/write another's.
         if "project_id" in inspect.signature(fn).parameters:
             arguments["project_id"] = self.project_id
+        # Tools keyed by task_id (reply, update_status, get_dependencies,
+        # auto_decide, get_task) have no project_id parameter to force-scope,
+        # so ownership must be checked explicitly here or a task_id borrowed
+        # from another project's workspace would be served/mutated anyway.
+        task_id = arguments.get("task_id")
+        if task_id is not None:
+            task = await TaskService(session).get_task(task_id)
+            if task is None or task.project_id != self.project_id:
+                return {"error": "task not found"}
         return await fn(session, **arguments)
 
     def list_tools(self) -> list[str]:
