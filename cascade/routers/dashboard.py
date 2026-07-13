@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from cascade.database import get_db, async_session_factory
+from cascade.database import get_db
 from cascade.engine.progress_tracker import tracker
 from cascade.services.goal_service import GoalService
 from cascade.services.milestone_service import MilestoneService
@@ -30,13 +30,29 @@ async def sse_stream(project_id: str, request: Request):
     """
 
     async def event_generator():
-        async for message in tracker.stream(project_id):
-            if await request.is_disconnected():
-                break
-            yield {
-                "event": message["event"],
-                "data": json.dumps(message["data"], default=str),
-            }
+        # ``tracker.stream`` blocks indefinitely on the subscriber queue
+        # between events, so checking ``is_disconnected()`` only after a
+        # yield would leave the generator (and its queue subscription)
+        # hanging forever whenever a disconnected client falls silent.
+        # Poll with a timeout instead, sending a keep-alive ping when idle.
+        stream = tracker.stream(project_id)
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    message = await asyncio.wait_for(stream.__anext__(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    yield {"event": "ping", "data": "{}"}
+                    continue
+                except StopAsyncIteration:
+                    break
+                yield {
+                    "event": message["event"],
+                    "data": json.dumps(message["data"], default=str),
+                }
+        finally:
+            await stream.aclose()
 
     return EventSourceResponse(event_generator())
 

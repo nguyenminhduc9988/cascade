@@ -5,4 +5,4 @@ AgentRQ's agent orchestration (dequeue, status state machine, MCP tools,
 continuous monitoring loop).
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

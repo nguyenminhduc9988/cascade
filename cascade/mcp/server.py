@@ -8,6 +8,7 @@ returned that can be invoked directly (e.g. from the REST API or tests).
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any
 
@@ -41,7 +42,7 @@ class MCPServerRegistry:
         # accepts it — this is what makes the server *per-workspace*. A
         # caller-supplied project_id must never override it, or an agent
         # connected to one project's server could read/write another's.
-        if "project_id" in fn.__code__.co_varnames[: fn.__code__.co_argcount]:
+        if "project_id" in inspect.signature(fn).parameters:
             arguments["project_id"] = self.project_id
         return await fn(session, **arguments)
 

@@ -247,8 +247,6 @@ session, since `AsyncSession` isn't safe to share across coroutines:
 - **Scheduler** — spawns child tasks from due `cron`-status templates,
   idempotently (never double-spawns while a child is still active).
 
-Stall detection runs on its own slower 5-minute cadence.
-
 </details>
 
 <details>

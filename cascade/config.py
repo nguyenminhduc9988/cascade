@@ -30,8 +30,6 @@ class Settings(BaseSettings):
     # --- Engine ---
     # Seconds between monitoring-loop ticks. Continuous monitoring, not hourly.
     loop_tick_seconds: int = 10
-    # Seconds between stall-detection sweeps.
-    stall_check_interval_seconds: int = 300
     # Minutes of silence before an ongoing task is considered stalled.
     stall_threshold_minutes: int = 30
     # Seconds before an agent session with no heartbeat is considered dead.

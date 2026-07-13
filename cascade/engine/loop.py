@@ -1,15 +1,14 @@
 """Main monitoring loop — continuous execution (10s tick, NOT hourly).
 
 Runs forever (as a background task on app startup) and, on every tick, runs
-the poller, pinger and scheduler concurrently. Stall detection runs on its own
-slower cadence. This is the AgentRQ loop, reimagined as continuous monitoring.
+the poller, pinger and scheduler concurrently. This is the AgentRQ loop,
+reimagined as continuous monitoring.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import time
 
 from cascade.config import settings
 from cascade.database import async_session_factory
@@ -21,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 # Module-level state so the loop can be stopped gracefully.
 _running = False
-_last_stall_check = 0.0
 
 
 async def scheduler_tick() -> int:
@@ -32,17 +30,6 @@ async def scheduler_tick() -> int:
     if spawned:
         logger.info("Scheduler spawned %d cron task(s)", len(spawned))
     return len(spawned)
-
-
-async def stall_detector_tick() -> int:
-    """Run stall detection on its own slower cadence (every 5 min)."""
-    global _last_stall_check
-    now = time.time()
-    if now - _last_stall_check < settings.stall_check_interval_seconds:
-        return 0
-    _last_stall_check = now
-    async with async_session_factory() as session:
-        return await poller_tick(session)
 
 
 async def _poller_tick_isolated() -> int:
@@ -72,12 +59,9 @@ async def _tick() -> None:
         _poller_tick_isolated(),
         _pinger_tick_isolated(),
         scheduler_tick(),
-        stall_detector_tick(),
         return_exceptions=True,
     )
-    for name, result in zip(
-        ("poller", "pinger", "scheduler", "stall_detector"), results
-    ):
+    for name, result in zip(("poller", "pinger", "scheduler"), results):
         if isinstance(result, BaseException):
             logger.error("Monitoring tick component %r failed: %s", name, result)
 

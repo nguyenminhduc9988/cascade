@@ -19,10 +19,7 @@ def _service(session: AsyncSession = Depends(get_db)) -> ProjectService:
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(data: ProjectCreate, svc: ProjectService = Depends(_service)):
     """Create a new project."""
-    try:
-        return await svc.create_project(data)
-    except Exception as exc:  # pragma: no cover - defensive
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await svc.create_project(data)
 
 
 @router.get("", response_model=list[ProjectResponse])

@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from cascade import __version__
 from cascade.config import settings
 from cascade.database import init_db
 from cascade.engine.loop import monitoring_loop, stop_monitoring_loop
@@ -33,10 +34,10 @@ async def lifespan(app: FastAPI):
     logger.info("Initialising database...")
     await init_db()
 
+    import asyncio
+
     loop_task = None
     if settings.enable_monitoring_loop:
-        import asyncio
-
         loop_task = asyncio.create_task(monitoring_loop())
 
     logger.info("Cascade is ready at http://%s:%s", settings.host, settings.port)
@@ -46,6 +47,10 @@ async def lifespan(app: FastAPI):
         if loop_task:
             stop_monitoring_loop()
             loop_task.cancel()
+            try:
+                await loop_task
+            except asyncio.CancelledError:
+                pass
 
 
 def create_app() -> FastAPI:
@@ -56,7 +61,7 @@ def create_app() -> FastAPI:
             "Agent task orchestration platform combining Leantime's strategic "
             "coherence with AgentRQ's agent orchestration."
         ),
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
     )
 

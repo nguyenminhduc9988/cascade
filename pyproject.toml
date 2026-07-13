@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cascade-orchestrator"
-version = "0.1.0"
+version = "0.1.1"
 description = "Cascade — agent task orchestration platform combining Leantime's strategic coherence with AgentRQ's agent orchestration"
 readme = "README.md"
 requires-python = ">=3.11"
