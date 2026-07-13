@@ -35,9 +35,6 @@ class Settings(BaseSettings):
     # Seconds before an agent session with no heartbeat is considered dead.
     session_timeout_seconds: int = 60
 
-    # --- Scheduling ---
-    scheduler_interval_seconds: int = 60
-
     # --- Feature flags ---
     enable_monitoring_loop: bool = True
     enable_scheduler: bool = True

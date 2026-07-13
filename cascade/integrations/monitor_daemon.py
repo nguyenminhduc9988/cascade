@@ -169,21 +169,35 @@ class MonitorDaemon:
 
     # ------------------------------------------------------------ ticks
     async def _tick(self) -> None:
+        seen_task_ids: set[str] = set()
         projects = await self._client.list_projects(status_filter="active")
         for project in projects or []:
             project_id = project.id
             name = getattr(project, "name", project_id)
             try:
-                await self._check_project(project_id, name)
+                await self._check_project(project_id, name, seen_task_ids)
             except CascadeAPIError:
                 logger.exception("API error while checking project %s (%s)", project_id, name)
 
-    async def _check_project(self, project_id: str, project_name: str) -> None:
+        # Drop cooldown state for tasks no longer ongoing, so these dicts
+        # don't grow unbounded over a long-running daemon's lifetime.
+        self._last_nudge = {
+            k: v for k, v in self._last_nudge.items() if k in seen_task_ids
+        }
+        self._last_alert = {
+            k: v for k, v in self._last_alert.items() if k in seen_task_ids
+        }
+
+    async def _check_project(
+        self, project_id: str, project_name: str, seen_task_ids: set[str]
+    ) -> None:
         ongoing = await self._client.list_tasks(project_id, status="ongoing")
         if not ongoing:
             return
         for task in ongoing:
             task_id = getattr(task, "id", None)
+            if task_id is not None:
+                seen_task_ids.add(task_id)
             try:
                 await self._check_task(project_id, project_name, task)
             except CascadeAPIError:

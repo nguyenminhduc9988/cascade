@@ -55,13 +55,14 @@ async def _tick() -> None:
     ``AsyncSession`` is not safe for concurrent use by multiple coroutines,
     so sharing one across ``asyncio.gather`` would corrupt session state.
     """
-    results = await asyncio.gather(
-        _poller_tick_isolated(),
-        _pinger_tick_isolated(),
-        scheduler_tick(),
-        return_exceptions=True,
-    )
-    for name, result in zip(("poller", "pinger", "scheduler"), results):
+    names = ["poller", "pinger"]
+    coros = [_poller_tick_isolated(), _pinger_tick_isolated()]
+    if settings.enable_scheduler:
+        names.append("scheduler")
+        coros.append(scheduler_tick())
+
+    results = await asyncio.gather(*coros, return_exceptions=True)
+    for name, result in zip(names, results):
         if isinstance(result, BaseException):
             logger.error("Monitoring tick component %r failed: %s", name, result)
 

@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.sql.dml import Update
 
-from cascade.models import Project
+from cascade.models import Project, Task
 from cascade.schemas.task import TaskCreate
 from cascade.services.task_service import TaskService
 
@@ -63,7 +65,7 @@ async def test_status_state_machine_invalid_transition(session):
 async def test_dequeue_respects_priority(session):
     project = await _project(session)
     svc = TaskService(session)
-    low = await svc.create_task(
+    _low = await svc.create_task(
         TaskCreate(project_id=project.id, title="low", priority=1)
     )
     high = await svc.create_task(
@@ -164,6 +166,51 @@ async def test_concurrent_dequeue_never_double_claims(engine):
     results = await asyncio.gather(_dequeue(), _dequeue())
     winners = [r for r in results if r is not None and r.id == task.id]
     assert len(winners) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_status_rejects_concurrent_status_change(session):
+    """If the row's status changes between update_status's read and its
+    atomic conditional write, the write must be rejected — not silently
+    applied on top of a state the caller never validated against."""
+    project = await _project(session)
+    svc = TaskService(session)
+    task = await svc.create_task(TaskCreate(project_id=project.id, title="race"))
+    await svc.update_status(task.id, "ongoing")
+
+    original_execute = svc.session.execute
+    raced = False
+
+    async def _execute_with_race_before_the_atomic_update(stmt, *args, **kwargs):
+        nonlocal raced
+        if not raced and isinstance(stmt, Update):
+            raced = True
+            # Simulate another writer completing the task in the gap between
+            # update_status's validation read and its own atomic write below.
+            await original_execute(
+                update(Task).where(Task.id == task.id).values(status="completed")
+            )
+            await svc.session.commit()
+        return await original_execute(stmt, *args, **kwargs)
+
+    svc.session.execute = _execute_with_race_before_the_atomic_update
+    with pytest.raises(ValueError, match="concurrently"):
+        await svc.update_status(task.id, "blocked")
+
+    # The racing writer's change must have stuck — the loser never overwrote it.
+    svc.session.execute = original_execute
+    refetched = await svc.get_task(task.id)
+    assert refetched.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_unknown_dependency(session):
+    project = await _project(session)
+    svc = TaskService(session)
+    with pytest.raises(ValueError):
+        await svc.create_task(
+            TaskCreate(project_id=project.id, title="T", depends_on=["does-not-exist"])
+        )
 
 
 @pytest.mark.asyncio

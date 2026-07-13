@@ -30,7 +30,7 @@ async def test_progress_aggregates_from_linked_tasks(session):
     t1 = await task_svc.create_task(
         TaskCreate(project_id=project.id, title="t1", goal_id=goal.id)
     )
-    t2 = await task_svc.create_task(
+    _t2 = await task_svc.create_task(
         TaskCreate(project_id=project.id, title="t2", goal_id=goal.id)
     )
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cascade-orchestrator"
-version = "0.1.1"
+version = "0.1.2"
 description = "Cascade — agent task orchestration platform combining Leantime's strategic coherence with AgentRQ's agent orchestration"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -43,7 +43,6 @@ dependencies = [
     "python-ulid",
     "jinja2",
     "python-multipart",
-    "apscheduler",
     "croniter",
     "sse-starlette",
     "httpx",

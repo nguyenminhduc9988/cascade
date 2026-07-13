@@ -2,7 +2,7 @@
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=200&section=header&text=Cascade&fontSize=70&fontColor=ffffff&animation=fadeIn&fontAlignY=38&desc=Strategic%20coherence%20meets%20autonomous%20agent%20orchestration&descAlignY=58&descSize=18" width="100%"/>
 
-<a href="https://github.com/nguyenminhduc9988/cascade/actions"><img src="https://img.shields.io/badge/tests-35%20passing-4ade80?style=for-the-badge&logo=pytest&logoColor=white" /></a>
+<a href="https://github.com/nguyenminhduc9988/cascade/actions"><img src="https://img.shields.io/badge/tests-39%20passing-4ade80?style=for-the-badge&logo=pytest&logoColor=white" /></a>
 <a href="https://pypi.org/project/cascade-orchestrator/"><img src="https://img.shields.io/pypi/v/cascade-orchestrator?style=for-the-badge&color=6366f1&logo=pypi&logoColor=white&label=PyPI" /></a>
 <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=for-the-badge&logo=python&logoColor=white" /></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f59e0b?style=for-the-badge" /></a>
@@ -82,7 +82,7 @@ Kanban included.
 | **Schemas** | Pydantic v2 |
 | **IDs** | `python-ulid` — time-ordered, sortable |
 | **Real-time** | `sse-starlette` + in-memory pub/sub |
-| **Scheduling** | APScheduler + croniter |
+| **Scheduling** | croniter (cron-template spawning on the monitoring-loop tick) |
 | **UI** | HTMX + Tailwind (CDN, zero build step) |
 | **Agent protocol** | Model Context Protocol (MCP) tool registry |
 
@@ -296,12 +296,13 @@ pytest -q
 ```
 
 <div align="center">
-<img src="https://img.shields.io/badge/35%20tests-state%20machine%20%C2%B7%20dequeue%20race%20%C2%B7%20FK%20integrity%20%C2%B7%20REST%20%C2%B7%20MCP%20scoping-4ade80?style=flat-square" />
+<img src="https://img.shields.io/badge/39%20tests-state%20machine%20%C2%B7%20dequeue%20race%20%C2%B7%20status%20race%20%C2%B7%20FK%20integrity%20%C2%B7%20REST%20%C2%B7%20MCP%20scoping-4ade80?style=flat-square" />
 </div>
 
-35 tests run against an isolated in-memory SQLite database per test (with
+39 tests run against an isolated in-memory SQLite database per test (with
 `PRAGMA foreign_keys=ON` to match production), covering the status state
 machine, DAG dependency resolution, **concurrent dequeue race safety**,
+**concurrent status-transition race safety**, cron template spawn integrity,
 goal/milestone progress aggregation, cascade-delete referential integrity,
 event-trigger choreography, MCP workspace isolation, and the full REST +
 HTMX page surface.
@@ -343,7 +344,7 @@ cascade/
 │   ├── engine/                # monitoring loop, poller, pinger, progress tracker
 │   ├── integrations/          # Hermes bridge client + standalone monitor daemon
 │   └── web/                   # Jinja2 templates + static app.js
-└── tests/                     # pytest-asyncio, 35 tests
+└── tests/                     # pytest-asyncio, 39 tests
 ```
 
 <br/>

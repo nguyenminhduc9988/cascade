@@ -75,13 +75,21 @@ class TaskService:
         self.session.add(task)
         await self.session.flush()
 
-        # Wire up DAG dependencies.
-        for dep_id in data.depends_on or []:
-            if dep_id == task.id:
-                continue
-            self.session.add(
-                TaskDependency(task_id=task.id, depends_on_id=dep_id)
+        # Wire up DAG dependencies — validate IDs first so a bad reference
+        # surfaces as ValueError (→ 400) instead of an IntegrityError (→ 500)
+        # at commit time.
+        dep_ids = {d for d in (data.depends_on or []) if d != task.id}
+        if dep_ids:
+            existing = await self.session.execute(
+                select(Task.id).where(Task.id.in_(dep_ids))
             )
+            missing = dep_ids - set(existing.scalars().all())
+            if missing:
+                raise ValueError(f"depends_on references unknown task(s): {sorted(missing)}")
+            for dep_id in dep_ids:
+                self.session.add(
+                    TaskDependency(task_id=task.id, depends_on_id=dep_id)
+                )
 
         await self._record_telemetry(
             project_id=task.project_id,
@@ -328,14 +336,25 @@ class TaskService:
             )
 
         now = datetime.now(timezone.utc)
+        values: dict = {"status": new_status}
         if new_status == "ongoing" and task.started_at is None:
-            task.started_at = now
+            values["started_at"] = now
         if new_status == "completed":
-            task.completed_at = now
+            values["completed_at"] = now
         if new_status in {"ongoing"} and old_status == "completed":
-            task.completed_at = None  # reopening
+            values["completed_at"] = None  # reopening
 
-        task.status = new_status
+        # Atomic conditional update — guards against a concurrent transition
+        # racing between the read above and this write (mirrors _claim_task).
+        result = await self.session.execute(
+            update(Task)
+            .where(Task.id == task_id, Task.status == old_status)
+            .values(**values)
+        )
+        if result.rowcount == 0:
+            raise ValueError(
+                f"Task {task_id} status changed concurrently; retry"
+            )
 
         await self._record_telemetry(
             project_id=task.project_id,

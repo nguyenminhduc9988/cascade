@@ -1,9 +1,14 @@
 """Scheduler service — cron template → instance spawning with idempotency.
 
-Called every 60s by APScheduler. For each ``cron``-status task:
+Called every tick of the monitoring loop (``settings.loop_tick_seconds``,
+default 10s) when ``settings.enable_scheduler`` is true. For each
+``cron``-status task:
 1. Parse ``cron_schedule`` with croniter.
 2. If the next run is due AND no active child exists → clone a child.
-3. One-time templates (``@once``) are deleted after spawning.
+3. One-time templates (``@once``) have their ``cron_schedule`` cleared after
+   spawning, so they drop out of future queries without being deleted (a
+   spawned child's ``parent_id``/``cron_template_id`` FK back to the
+   template row, so deleting it would violate referential integrity).
 """
 
 from __future__ import annotations
@@ -76,10 +81,13 @@ class SchedulerService:
         anchor = _to_utc(last_dt) if last_dt else _to_utc(template.created_at)
 
         if template.cron_schedule == "@once":
-            # One-time template: spawn immediately on first due check.
+            # One-time template: spawn immediately on first due check, then
+            # clear cron_schedule so the WHERE clause in
+            # process_cron_templates never selects it again. (Deleting it
+            # would violate the child's parent_id/cron_template_id FKs.)
             child = self._clone(template)
             self.session.add(child)
-            await self.session.delete(template)  # one-time → delete after spawn
+            template.cron_schedule = None
             return child
 
         try:
