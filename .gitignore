@@ -15,3 +15,9 @@ cascade.db
 dist/
 build/
 .DS_Store
+
+# Personal Claude-memory MCP server (unrelated to the Cascade package;
+# lives here only for venv/import convenience — must never ship in the
+# published cascade-orchestrator package).
+cascade/mcp/memory_mcp.py
+cascade/mcp/memory_server.py
